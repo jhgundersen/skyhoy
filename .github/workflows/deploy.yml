@@ -1,0 +1,40 @@
+name: Build and deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: skyhoy-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm test
+      - run: npm run build
+      - name: Configure deployment SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Publish static build
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: rsync -az --delay-updates --delete-delay -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes' dist/ "skyhoy-deploy@$DEPLOY_HOST:./"
+      - name: Verify deployed build
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          curl --fail --silent --show-error --retry 3 --resolve "skyhoy.jonh.no:443:$DEPLOY_HOST" https://skyhoy.jonh.no/ -o /tmp/live-index.html
+          cmp dist/index.html /tmp/live-index.html
