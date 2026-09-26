@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.0.0" },
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/build.mjs --check"
+    "dev": "STATIC_INDEX=public/index.html DB_PATH=dev.sqlite HOST=127.0.0.1 PORT=8888 node server/app.mjs",
+    "test": "node --test test/*.test.mjs"
   }
 }

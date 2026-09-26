@@ -1,0 +1,38 @@
+services:
+  skyhoy-leaderboard:
+    image: node:22-alpine
+    command: ["node", "/runtime/watch.cjs"]
+    user: "1000:1000"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 32
+    environment:
+      NODE_ENV: production
+      NODE_NO_WARNINGS: "1"
+      ORIGIN: https://skyhoy.jonh.no
+      TRUST_PROXY: "1"
+      PORT: "8082"
+      DB_PATH: /data/skyhoy.sqlite
+    volumes:
+      - /srv/skyhoy/server:/app:ro
+      - ./watch.cjs:/runtime/watch.cjs:ro
+      - /srv/skyhoy-data:/data
+    networks: [website]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8082/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+networks:
+  website:
+    external: true
+    name: website_default

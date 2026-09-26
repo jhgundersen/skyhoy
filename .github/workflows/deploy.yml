@@ -38,3 +38,5 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 3 --resolve "skyhoy.jonh.no:443:$DEPLOY_HOST" https://skyhoy.jonh.no/ -o /tmp/live-index.html
           cmp dist/index.html /tmp/live-index.html
+      - name: Verify leaderboard service
+        run: curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 3 https://skyhoy.jonh.no/api/health
