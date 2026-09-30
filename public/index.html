@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0712">
 <title>SKYHØY 32 — med Joachim</title>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee+Shade&family=Press+Start+2P&display=swap">
@@ -16,6 +17,9 @@
   --pix:'Press Start 2P', ui-monospace, Menlo, Consolas, monospace;
 }
 [hidden]{display:none!important;}
+#game3d{position:fixed;left:0;display:block;pointer-events:none;}
+body.v3d #game{background:transparent;}
+body.v3d-play #joachim{display:none;}
 html,body{height:100%;}
 body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;font-family:var(--pix);
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;overscroll-behavior:none;}
@@ -87,6 +91,7 @@ body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;font-family:
 <canvas id="game" aria-label="SKYHØY – flipperspill"></canvas>
 
 <div id="ui" hidden>
+  <button id="btnView" class="icon" type="button" aria-label="Bytt kamera"><svg viewBox="0 0 24 24"><path d="M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4H9zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg></button>
   <button id="btnPause" class="icon" type="button" aria-label="Pause"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
   <button id="btnSound" class="icon" type="button" aria-label="Lyd av eller på"><svg viewBox="0 0 24 24"><path id="sndIcon" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
 </div>
@@ -101,9 +106,10 @@ body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;font-family:
     <div class="world-list"><p class="route-label">REISEN DIN <span>FRA BUNN TIL TOPP ↑</span></p><ol class="tower" id="tower" reversed></ol></div>
     <button id="btnStart" class="big" type="button">KJØR PÅ, DU! ↗</button>
     <button id="btnLeaderboard" class="ghost" type="button">GLOBAL REKORDLISTE ↗</button>
+    <button id="btnViewMenu" class="ghost" type="button">KAMERA: 2D OVENFRA ↻</button>
     <p class="load" id="loadMsg">Musikk, effekter og Joachims tekstkommentarer.</p>
     <p class="help"><em>Venstre halvdel</em> styrer alle venstre flippere, <em>høyre halvdel</em> alle høyre. Hold inne og slipp for å skyte ut kula. Treff rampene for å ta heisen opp til neste verden. Faller kula ned mellom flipperne, havner du i verdenen under – bare i Havdypet mister du den.</p>
-    <p class="help">Tastatur: <em>Z / ←</em> og <em>M / →</em>, <em>mellomrom</em> skyter ut, <em>P</em> pause.</p>
+    <p class="help">Tastatur: <em>Z / ←</em> og <em>M / →</em>, <em>mellomrom</em> skyter ut, <em>P</em> pause, <em>C</em> bytter kamera: 2D, 3D fra bunnen eller 3D inni kula.</p>
     <p class="hi">REKORD <span id="hiScore">0</span></p>
   </div>
 </section>
@@ -347,11 +353,16 @@ function buildSection(s) {
 
   // rampeinnganger (heisene)
   for (const side of ['L', 'R']) {
-    const xa = side === 'L' ? 88 : 438, xb = side === 'L' ? 162 : 512;
+    // på første brett står utskytingsløpet der høyre ytterkant ellers er; løpet går helt inntil det,
+    // ellers blir det en sprekk kula kiler seg fast i
+    const toPlunger = s === 0 && side === 'R';
+    const xa = side === 'L' ? 88 : 438, xb = side === 'L' ? 162 : toPlunger ? 540 : 512;
     addSeg(xa, Y(350), xa, Y(460), o);
-    addSeg(xb, Y(350), xb, Y(460), o);
-    addSeg(xa, Y(350), xb, Y(350), { s, hidden: true });
-    addCircle(xa, Y(460), 5, o); addCircle(xb, Y(460), 5, o);
+    if (!toPlunger) addSeg(xb, Y(350), xb, Y(460), o);
+    // taket over løpet heller, så kula ruller av i stedet for å bli liggende
+    if (toPlunger) addSeg(xa, Y(350), xb, Y(326), { s, hidden: true });
+    else { const cx = (xa + xb) / 2; addSeg(xa, Y(350), cx, Y(332), { s, hidden: true }); addSeg(cx, Y(332), xb, Y(350), { s, hidden: true }); }
+    addCircle(xa, Y(460), 5, o); if (!toPlunger) addCircle(xb, Y(460), 5, o);
     lanes.push({ s, side, x0: xa, x1: xb, y0: Y(352), y1: Y(432), glow: 0 });
   }
 
@@ -1454,6 +1465,7 @@ function resize() {
   OX = (SW - 600 * VS) / 2; TOP = dmdH; VH = (SHs - dmdH) / VS;
   document.documentElement.style.setProperty('--dmdh', dmdH + 'px');
   makeScreenFx();
+  if (typeof V3 !== 'undefined') sync3d();
 }
 
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -1702,6 +1714,7 @@ function drawChevron(x, y, w, col, dir = -1) {
 }
 
 function render(t) {
+  if (use3d()) { render3d(t); render3dOverlay(t); return; }
   const sx = REDUCED ? 0 : (Math.random() - 0.5) * shake, sy = REDUCED ? 0 : (Math.random() - 0.5) * shake;
   const cw = game.world;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -1847,7 +1860,11 @@ function render(t) {
     if (!input.plungerHeld && Math.sin(t * 6) > 0) drawChevron(PLUNGE_X, T0 + 920, 10, '#ffd23d');
   }
 
-  // skjermplass
+  drawHud(t, cw);
+}
+
+// skjermplass: høydemåler, flippertrykk, skannelinjer, vignett og DMD
+function drawHud(t, cw) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawAltimeter(t);
   if (game.state === 'play' || game.state === 'plunger') {
@@ -1859,11 +1876,11 @@ function render(t) {
     }
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = SCAN; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!use3d()) { ctx.fillStyle = SCAN; ctx.fillRect(0, 0, cv.width, cv.height); }
   ctx.drawImage(VIGN, 0, 0, cv.width, cv.height);
   if (flashA > 0) { ctx.fillStyle = `rgba(255,255,255,${flashA * 0.5})`; ctx.fillRect(0, 0, cv.width, cv.height); }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  drawDMD(t);
+  if (!hud3d()) drawDMD(t);
 }
 
 /* ===== DMD-skjerm (punktmatrise) og høydemåler ===== */
@@ -1950,7 +1967,7 @@ function drawDMD(t) {
 
 function drawAltimeter(t) {
   if (game.state === 'attract') return;
-  const x = Math.max(6, OX - 18), top = TOP + 14, bot = SHs - 18, H = bot - top, h = H / NS;
+  const x = use3d() ? 8 : Math.max(6, OX - 18), top = hud3d() ? 14 : TOP + 14, bot = SHs - 18, H = bot - top, h = H / NS;
   for (let s = 0; s < NS; s++) {
     const yt = bot - (s + 1) * h;
     ctx.fillStyle = rgba(WORLDS[s].accent, game.reached[s] ? 0.85 : 0.18);
@@ -2151,6 +2168,7 @@ addEventListener('keydown', e => {
   if(e.target.matches?.('input,textarea,select') || !$('leaderboard').hidden) return;
   if (e.target.tagName === 'BUTTON' && (e.code === 'Space' || e.code === 'Enter') && game.state !== 'play' && game.state !== 'plunger') return;
   if (e.code === 'KeyP' || e.code === 'Escape') { if (game.state === 'play' || game.state === 'plunger' || game.state === 'drain') setPause(!paused); e.preventDefault(); return; }
+  if (e.code === 'KeyC' && !e.repeat) { cycleView(); e.preventDefault(); return; }
   if (paused) return;
   if (KL.includes(e.code)) { input.kL = true; syncSides(); e.preventDefault(); }
   else if (KR.includes(e.code)) { input.kR = true; syncSides(); e.preventDefault(); }
@@ -2321,6 +2339,753 @@ function setupLeaderboard(){
  });
 }
 
+/* ===== 3D-kamera: bordet i 3D, sett fra bunnen eller fra innsiden av kula ===== */
+const VIEWS = ['2d', 'base', 'ball'];
+const VIEW_NAMES = { '2d': ['KAMERA', '2D OVENFRA'], base: ['KAMERA', '3D FRA BUNNEN'], ball: ['KAMERA', '3D INNI KULA'] };
+const WALL_H = 34, RAMP_H = 72, TILT = 6.5 * Math.PI / 180, GLASS_H = 96;
+const SHADOW = [0.8, -0.6];   // retning skyggene faller på bordet (lyset kommer fra venstre, nærmest spilleren)
+const V3 = { mode: '2d', ready: false, loading: null, T: null, R: null, scene: null, cam: null, secs: [], top: 0,
+  yaw: Math.PI, clock: 0, q: 2, slow: 0, grace: 5, px: 0, pz: 0, bz: 0, bx: 300, dark: -1, fwd: null, v: null };
+try { const v = localStorage.getItem('skyhoy_view'); if (VIEWS.includes(v)) V3.mode = v; } catch (e) {}
+const use3d = () => V3.mode !== '2d' && V3.ready;
+let col3 = null;
+
+function rampElev(d, total) {
+  const e = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+  return RAMP_H * e(d / 200) * e((total - d) / 220);
+}
+function ballHeight() {
+  let h = BR;
+  if (ball.mode === 'lift' && ball.lift) h += rampElev(ball.liftD, ball.lift.total);
+  if (ball.mode === 'saucer') h -= ball.sink * BR * 0.8;
+  return h;
+}
+
+function setView(m) {
+  V3.mode = m;
+  try { localStorage.setItem('skyhoy_view', m); } catch (e) {}
+  syncViewLabels();
+  dmdShow(VIEW_NAMES[m], 1.4, { now: true });
+  if (m !== '2d' && !V3.ready) load3d();
+  V3.grace = 3; sync3d();
+}
+function cycleView() { setView(VIEWS[(VIEWS.indexOf(V3.mode) + 1) % VIEWS.length]); }
+function syncViewLabels() {
+  $('btnViewMenu').textContent = 'KAMERA: ' + VIEW_NAMES[V3.mode][1] + ' ↻';
+  $('btnView').setAttribute('aria-label', 'Bytt kamera (nå ' + VIEW_NAMES[V3.mode][1].toLowerCase() + ')');
+}
+function load3d() {
+  if (V3.loading) return V3.loading;
+  return (V3.loading = import('three').then(async T => {
+    // etterglød er pynt: uten den virker 3D fortsatt, bare mindre skinnende
+    let post = null;
+    try {
+      const add = 'three/addons/postprocessing/';
+      const [a, b, c, d, e, f, gl] = await Promise.all(['EffectComposer', 'RenderPass', 'UnrealBloomPass', 'OutputPass', 'ShaderPass'].map(n => import(add + n + '.js'))
+        .concat(import('three/addons/objects/Reflector.js'), import('three/addons/loaders/GLTFLoader.js')));
+      post = { EffectComposer: a.EffectComposer, RenderPass: b.RenderPass, UnrealBloomPass: c.UnrealBloomPass, OutputPass: d.OutputPass, ShaderPass: e.ShaderPass, Reflector: f.Reflector, GLTFLoader: gl.GLTFLoader };
+    } catch (err) { console.warn('3D uten glød:', err); }
+    init3d(T, post); V3.ready = true; sync3d();
+  }).catch(err => {
+    console.error('3D:', err); V3.loading = null;
+    if (V3.mode !== '2d') { V3.mode = '2d'; syncViewLabels(); dmdShow(['3D VIRKER IKKE', 'TILBAKE TIL 2D'], 2.2, { now: true }); }
+    sync3d();
+  }));
+}
+function sync3d() {
+  const on = use3d();
+  document.body.classList.toggle('v3d', on);
+  if (!on) { document.body.classList.remove('v3d-play'); V3.playCls = null; }
+  if (!V3.R) return;
+  V3.R.domElement.style.display = on ? 'block' : 'none';
+  const top = hud3d() ? 0 : TOP, r = cv.getBoundingClientRect(), w = SW, h = Math.max(1, SHs - top), pr = Math.min(DPR, [1, 1.25, 1.5][V3.q]);
+  V3.top = top;
+  V3.R.domElement.style.top = (r.top + top) + 'px';
+  V3.R.setPixelRatio(pr); V3.R.setSize(w, h);
+  if (V3.fx) { V3.fx.setPixelRatio(pr); V3.fx.setSize(w, h); }
+  if (V3.mirror) V3.mirror.getRenderTarget().setSize(Math.round(w * pr * 0.5), Math.round(h * pr * 0.5));
+  V3.cam.aspect = w / h; V3.cam.updateProjectionMatrix();
+}
+
+function floorCanvas(s) {
+  const k = 0.8, c = mkCanvas(480, 800), g = c.getContext('2d'), T = secTop(s), Wd = WORLDS[s];
+  g.imageSmoothingEnabled = false;
+  g.drawImage(BGS[s], 0, 0, 480, 800);
+  g.fillStyle = `rgba(0,0,0,${DIM[s]})`; g.fillRect(26 * k, 0, 548 * k, 800);
+  g.imageSmoothingEnabled = true;
+  g.globalCompositeOperation = 'lighter'; g.drawImage(GLOWS[s], 0, 0, 480, 800); g.globalCompositeOperation = 'source-over';
+  g.setTransform(k, 0, 0, k, 0, -T * k);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  // myke skygger fra vegger, stolper, sprettkopper og rampene, bakt inn i gulvet
+  const off = 10000;
+  g.save(); g.translate(-off, 0);
+  g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 12 * k; g.shadowOffsetX = (off + SHADOW[0] * 18) * k; g.shadowOffsetY = SHADOW[1] * 18 * k;
+  g.strokeStyle = '#000'; g.fillStyle = '#000'; g.lineWidth = 6; g.stroke(WALLPATH[s]);
+  for (const c of circles) if (c.s === s && !c.hidden) { g.beginPath(); g.arc(c.x, c.y, c.kind === 'bumper' ? c.r + 6 : c.r + 1, 0, 7); g.fill(); }
+  for (const w of targets) if (w.s === s) { g.lineWidth = 8; g.beginPath(); g.moveTo(w.x1, w.y1); g.lineTo(w.x2, w.y2); g.stroke(); }
+  for (const k2 of slings) if (k2.s === s) { g.beginPath(); g.moveTo(...k2.tri[0]); g.lineTo(...k2.tri[1]); g.lineTo(...k2.tri[2]); g.closePath(); g.fill(); }
+  g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = 20 * k; g.shadowOffsetX = (off + SHADOW[0] * 45) * k; g.shadowOffsetY = SHADOW[1] * 45 * k; g.lineWidth = 16;
+  TRACKS.forEach((tr, i) => { if (tr.s >= s - 1 && tr.s <= s) g.stroke(TRACKPATH[i]); });
+  g.restore();
+  g.strokeStyle = Wd.accent; g.lineWidth = 4; g.stroke(WALLPATH[s]);
+  for (const l of lanes) if (l.s === s) {
+    const col = s === NS - 1 ? '#ffe94d' : Wd.accent2, cx = (l.x0 + l.x1) / 2;
+    g.fillStyle = rgba(col, 0.18); g.fillRect(l.x0 + 3, l.y0 - 2, l.x1 - l.x0 - 6, 110);
+  }
+  for (const k2 of slings) if (k2.s === s) { g.fillStyle = rgba(Wd.accent2, 0.3); g.beginPath(); g.moveTo(...k2.tri[0]); g.lineTo(...k2.tri[1]); g.lineTo(...k2.tri[2]); g.closePath(); g.fill(); }
+  return c;
+}
+
+function init3d(T, post) {
+  V3.T = T; V3.post = post; col3 = new T.Color();
+  const R = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  R.domElement.id = 'game3d'; R.domElement.setAttribute('aria-hidden', 'true');
+  cv.before(R.domElement);
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(55, 1, 1, 5000);
+  scene.fog = new T.Fog(0x000000, 900, 2600); scene.background = new T.Color(0);
+  scene.add(new T.HemisphereLight(0xffffff, 0x3a3450, 0.9));
+  const sun = new T.DirectionalLight(0xffffff, 1.6); sun.position.set(-300, 900, 600); scene.add(sun);
+  Object.assign(V3, { R, scene, cam, fwd: new T.Vector3(), v: new T.Vector3(), pm: new T.PMREMGenerator(R) });
+  const aniso = R.capabilities.getMaxAnisotropy(), dummy = new T.Object3D(), col = new T.Color();
+  V3.dummy = new T.Object3D();
+  // farger over 1 lyser gjennom ettergløden
+  const hdr = (c, k) => new T.Color(c).multiplyScalar(k);
+  const neon = (c, k = 1.6, o = {}) => new T.MeshBasicMaterial({ color: hdr(c, k), ...o });
+  const gloss = (c, o = {}) => new T.MeshStandardMaterial({ color: c, metalness: 0.1, roughness: 0.22, ...o });
+  const chrome = (c = 0xf2f5ff, rough = 0.12) => new T.MeshStandardMaterial({ color: c, metalness: 1, roughness: rough });
+  const flat = g => { g.rotateX(Math.PI / 2); return g; };
+  const extrude = (shape, depth) => { const g = flat(new T.ExtrudeGeometry(shape, { depth, bevelEnabled: false })); g.translate(0, depth, 0); return g; };
+
+  // seksjoner: blankt gulv med verdensbildet, pluss alt som bare trengs i nærheten
+  const floorGeo = new T.PlaneGeometry(600, 1000).rotateX(-Math.PI / 2);
+  for (let s = 0; s < NS; s++) {
+    const group = new T.Group(), floor = new T.Mesh(floorGeo, new T.MeshStandardMaterial({ color: 0x000000, emissive: 0x111111, roughness: 0.25, metalness: 0, envMapIntensity: 0.12 }));
+    floor.position.set(300, 0, secTop(s) + 500); group.add(floor); scene.add(group);
+    const side = addScenery(T, s, group);
+    const Wd = WORLDS[s], tex = new T.CanvasTexture(BUMPIMG[s]); tex.colorSpace = T.SRGBColorSpace;
+    V3.secs.push({ group, floor, tex: null, side, bumpTop: new T.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.45, roughness: 0.15 }),
+      flipOff: gloss(0xe8ecf6, { emissive: Wd.accent, emissiveIntensity: 0.08 }), flipOn: gloss(0xffffff, { emissive: Wd.accent, emissiveIntensity: 0.9 }),
+      pivot: neon(Wd.accent, 2.4), tie: neon(Wd.accent2, 1.8) });
+  }
+
+  // vegger: blanke klosser med neonlist på toppen
+  const wl = walls.filter(w => !w.hidden && w.kind === 'wall');
+  const wallIM = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), gloss(0xffffff), wl.length);
+  const stripIM = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshBasicMaterial({ color: 0xffffff }), wl.length);
+  wl.forEach((w, i) => {
+    dummy.position.set((w.x1 + w.x2) / 2, 0, (w.y1 + w.y2) / 2); dummy.rotation.set(0, -Math.atan2(w.dy, w.dx), 0);
+    dummy.scale.set(w.len + 2, WALL_H, 4); dummy.updateMatrix();
+    wallIM.setMatrixAt(i, dummy.matrix); wallIM.setColorAt(i, col.set(mixHex(WORLDS[w.s].accent, '#000000', 0.45)));
+    dummy.position.y = WALL_H + 1; dummy.scale.set(w.len + 2, 2, 5.5); dummy.updateMatrix();
+    stripIM.setMatrixAt(i, dummy.matrix); stripIM.setColorAt(i, col.set(WORLDS[w.s].accent).multiplyScalar(1.5));
+  });
+  scene.add(wallIM, stripIM);
+  const posts = circles.filter(c => c.kind === 'post' && !c.hidden);
+  const postIM = new T.InstancedMesh(new T.CylinderGeometry(1, 1, 1, 16).translate(0, 0.5, 0), chrome(0xffffff, 0.1), posts.length);
+  posts.forEach((c, i) => {
+    dummy.position.set(c.x, 0, c.y); dummy.rotation.set(0, 0, 0); dummy.scale.set(c.r, WALL_H + 3, c.r); dummy.updateMatrix();
+    postIM.setMatrixAt(i, dummy.matrix); postIM.setColorAt(i, col.set(mixHex(WORLDS[c.s].accent, '#ffffff', 0.6)));
+  });
+  scene.add(postIM);
+
+  // krom-sidelister langs hele bordet
+  const railMat = chrome(0x9aa0b4, 0.3); railMat.envMapIntensity = 0.6;
+  for (const x of [13, 587]) { const m = new T.Mesh(new T.BoxGeometry(26, 56, TH), railMat); m.position.set(x, 28, TH / 2); scene.add(m); }
+
+  // enveisporter
+  for (const g of gates) {
+    const m = new T.Mesh(new T.BoxGeometry(g.len, 3, 3), neon(WORLDS[g.s].accent, 1.6, { transparent: true, opacity: 0.6 }));
+    m.position.set((g.x1 + g.x2) / 2, 1.5, g.y1); V3.secs[g.s].group.add(m);
+  }
+
+  // mål, sprettere, sprettkopper, sluk
+  const box = new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  for (const w of targets) {
+    const m = new T.Mesh(box, gloss(mixHex(WORLDS[w.s].accent, '#000000', 0.5), { emissive: WORLDS[w.s].accent, emissiveIntensity: 0.15 }));
+    m.position.set(w.cx, 0, w.cy); m.rotation.y = -w.ang; m.scale.set(46, 28, 7);
+    w.m3 = m; V3.secs[w.s].group.add(m);
+  }
+  for (const k of slings) {
+    const sh = new T.Shape(); sh.moveTo(k.tri[0][0], k.tri[0][1]); sh.lineTo(k.tri[1][0], k.tri[1][1]); sh.lineTo(k.tri[2][0], k.tri[2][1]); sh.closePath();
+    const Wd = WORLDS[k.s], m = new T.Mesh(extrude(sh, 24), gloss(Wd.accent2, { emissive: Wd.accent2, emissiveIntensity: 0.2, transparent: true, opacity: 0.82 }));
+    k.m3 = m; V3.secs[k.s].group.add(m);
+  }
+  const skirtMat = chrome(0xffffff, 0.08);
+  for (const c of bumpers) {
+    const Wd = WORLDS[c.s], sec = V3.secs[c.s], side = gloss(mixHex(Wd.accent2, '#000000', 0.25), { emissive: Wd.accent2, emissiveIntensity: 0.25 });
+    const m = new T.Mesh(new T.CylinderGeometry(c.r, c.r, 28, 32).translate(0, 14, 0), [side, sec.bumpTop, side]);
+    const skirt = new T.Mesh(new T.CylinderGeometry(c.r + 7, c.r + 9, 6, 32).translate(0, 3, 0), skirtMat);
+    const ring = new T.Mesh(new T.TorusGeometry(c.r - 1, 1.8, 8, 40).rotateX(Math.PI / 2).translate(0, 28.5, 0), neon(Wd.accent, 1.4));
+    m.add(ring); m.position.set(c.x, 0, c.y); skirt.position.set(c.x, 0, c.y);
+    c.m3 = m; c.ring3 = ring; sec.group.add(m, skirt);
+  }
+  const ringGeo = new T.TorusGeometry(26, 2.5, 8, 32).rotateX(Math.PI / 2), holeGeo = new T.CircleGeometry(22, 32).rotateX(-Math.PI / 2);
+  for (const sa of saucers) {
+    const hole = new T.Mesh(holeGeo, new T.MeshBasicMaterial({ color: 0x000000 })), ring = new T.Mesh(ringGeo, neon(WORLDS[sa.s].accent2, 2, { transparent: true }));
+    hole.position.set(sa.x, 0.6, sa.y); ring.position.set(sa.x, 1.5, sa.y);
+    sa.m3 = ring; V3.secs[sa.s].group.add(hole, ring);
+  }
+
+  // flippere: blank lakk og selvlysende dreiepunkt
+  const fgeo = {}, capGeo = new T.CylinderGeometry(1, 1, 1, 16).translate(0, 0.5, 0);
+  for (const f of flippers) {
+    const key = f.len + '|' + f.r0 + '|' + f.r1;
+    if (!fgeo[key]) {
+      const sh = new T.Shape();
+      sh.absarc(0, 0, f.r0, Math.PI / 2, Math.PI * 1.5, false); sh.lineTo(f.len, -f.r1); sh.absarc(f.len, 0, f.r1, -Math.PI / 2, Math.PI / 2, false); sh.closePath();
+      fgeo[key] = extrude(sh, 20);
+    }
+    const m = new T.Mesh(fgeo[key], V3.secs[f.s].flipOff), cap = new T.Mesh(capGeo, V3.secs[f.s].pivot);
+    cap.scale.set(f.r0 * 0.4, 23, f.r0 * 0.4); m.add(cap);
+    m.position.set(f.x, 0, f.y); f.m3 = m; V3.secs[f.s].group.add(m);
+  }
+
+  // heisrampene: krom-skinner, selvlysende sviller og stolper
+  const ties = [], legs = [], wire = chrome(0xffffff, 0.06);
+  for (const tr of TRACKS) {
+    const p = tr.p, sec = V3.secs[tr.s];
+    for (const sgn of [-1, 1]) {
+      const pts = [];
+      for (let i = 0; i < p.pts.length; i += 2) {
+        const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(p.pts.length - 1, i + 1)];
+        let nx = -(b[1] - a[1]), ny = b[0] - a[0]; const l = Math.hypot(nx, ny) || 1;
+        pts.push(new T.Vector3(p.pts[i][0] + nx / l * 9 * sgn, rampElev(p.lens[i], p.total) + 4, p.pts[i][1] + ny / l * 9 * sgn));
+      }
+      const tube = new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length, 1.8, 5, false);
+      sec.group.add(new T.Mesh(tube, wire));
+    }
+    for (let d = 10; d < p.total; d += 26) {
+      const [x1, y1] = pathAt(p, d), [x2, y2] = pathAt(p, d + 1), e = rampElev(d, p.total);
+      ties.push([x1, e + 2, y1, -Math.atan2(y2 - y1, x2 - x1), tr.s]);
+      if (e > 18 && Math.round(d / 26) % 5 === 0) legs.push([x1, e, y1, tr.s]);
+    }
+  }
+  const tieIM = new T.InstancedMesh(new T.BoxGeometry(3, 2, 24), new T.MeshBasicMaterial({ color: 0xffffff }), ties.length);
+  ties.forEach(([x, y, z, a, s], i) => {
+    dummy.position.set(x, y, z); dummy.rotation.set(0, a, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+    tieIM.setMatrixAt(i, dummy.matrix); tieIM.setColorAt(i, col.set(WORLDS[s].accent2).multiplyScalar(1.15));
+  });
+  const legIM = new T.InstancedMesh(new T.CylinderGeometry(1.6, 1.6, 1, 8).translate(0, 0.5, 0), railMat, legs.length);
+  legs.forEach(([x, h, z], i) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, h, 1); dummy.updateMatrix(); legIM.setMatrixAt(i, dummy.matrix); });
+  scene.add(tieIM, legIM);
+
+  // kula: speilblank krom, eget lys og glød på gulvet
+  V3.ball = new T.Mesh(new T.SphereGeometry(BR, 48, 32), new T.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.04 }));
+  const glowTex = new T.CanvasTexture(glowSprite('#ffffff')); glowTex.colorSpace = T.SRGBColorSpace;
+  V3.glow = new T.Mesh(new T.PlaneGeometry(90, 90).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ map: glowTex, transparent: true, blending: T.AdditiveBlending, depthWrite: false, opacity: 0.55, fog: false }));
+  V3.ballLight = new T.PointLight(0xffffff, 1400, 260, 2);
+  scene.add(V3.ball, V3.glow, V3.ballLight);
+
+  // gnister og kulehale som lysende punkter i rommet
+  const dots = (n, size) => {
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(new Float32Array(n * 3), 3).setUsage(T.DynamicDrawUsage));
+    g.setAttribute('color', new T.BufferAttribute(new Float32Array(n * 3), 3).setUsage(T.DynamicDrawUsage));
+    const p = new T.Points(g, new T.PointsMaterial({ size, map: glowTex, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false }));
+    p.frustumCulled = false; scene.add(p); return p;
+  };
+  V3.sparks = dots(420, 14); V3.trail = dots(14, 16);
+
+  // kuleskygge: mørk flekk som faller skrått og blir større og svakere jo høyere kula er
+  const sc = mkCanvas(64, 64), sg = sc.getContext('2d'), sgr = sg.createRadialGradient(32, 32, 0, 32, 32, 32);
+  sgr.addColorStop(0, 'rgba(0,0,0,0.85)'); sgr.addColorStop(0.5, 'rgba(0,0,0,0.45)'); sgr.addColorStop(1, 'rgba(0,0,0,0)');
+  sg.fillStyle = sgr; sg.fillRect(0, 0, 64, 64);
+  const shTex = new T.CanvasTexture(sc);
+  V3.shadow = new T.Mesh(new T.PlaneGeometry(38, 38).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ map: shTex, transparent: true, depthWrite: false, color: 0x000000 }));
+  V3.shadow.renderOrder = 1; scene.add(V3.shadow);
+
+  // lamper i bordet: pilene i heisløpene og lyskransen rundt sluket, som blinker som i 2D
+  const chev = new T.Shape([[-16, 9.6], [0, 0], [16, 9.6], [16, 14.6], [0, 5], [-16, 14.6]].map(([x, y]) => new T.Vector2(x, y)));
+  const chevGeo = extrude(chev, 1), dotGeo = new T.BoxGeometry(5, 1.2, 5);
+  V3.secs.forEach((sec, s) => {
+    const ls = lanes.filter(l => l.s === s), sa = saucers.find(q => q.s === s);
+    sec.lanes = ls; sec.saucer = sa;
+    sec.chev = new T.InstancedMesh(chevGeo, new T.MeshBasicMaterial({ color: 0xffffff, fog: true }), ls.length * 3);
+    ls.forEach((l, i) => { for (let j = 0; j < 3; j++) {
+      dummy.position.set((l.x0 + l.x1) / 2, 0.4, l.y0 + 28 + j * 26); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+      sec.chev.setMatrixAt(i * 3 + j, dummy.matrix); sec.chev.setColorAt(i * 3 + j, col.set(0));
+    } });
+    sec.dots = new T.InstancedMesh(dotGeo, new T.MeshBasicMaterial({ color: 0xffffff }), 8);
+    for (let j = 0; j < 8; j++) sec.dots.setColorAt(j, col.set(0));
+    sec.dots.frustumCulled = sec.chev.frustumCulled = false;
+    sec.group.add(sec.chev, sec.dots);
+  });
+
+  // glassplate over bordet: bare speilingen legges til, så den er usynlig der den ikke fanger lys
+  V3.glass = new T.Mesh(new T.PlaneGeometry(548, 2800).rotateX(-Math.PI / 2),
+    new T.MeshStandardMaterial({ color: 0x000000, roughness: 0.03, metalness: 0, envMapIntensity: 1.1, transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  V3.glass.position.set(300, GLASS_H, TH / 2); V3.glass.renderOrder = 2; scene.add(V3.glass);
+
+  // speiling i det blanke gulvet: scenen tegnes speilvendt i halv oppløsning og legges svakt oppå
+  if (post && post.Reflector) {
+    const shader = {
+      name: 'FloorMirror',
+      uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, strength: { value: 0.2 } },
+      vertexShader: 'uniform mat4 textureMatrix;\nvarying vec4 vUv;\nvoid main() {\n  vUv = textureMatrix * vec4(position, 1.0);\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n}',
+      fragmentShader: 'uniform sampler2D tDiffuse;\nuniform float strength;\nvarying vec4 vUv;\nvoid main() {\n  gl_FragColor = vec4(texture2DProj(tDiffuse, vUv).rgb * strength, 1.0);\n}'
+    };
+    const m = new post.Reflector(new T.PlaneGeometry(548, TH), { textureWidth: 512, textureHeight: 512, clipBias: 0.003, shader });
+    m.rotation.x = -Math.PI / 2; m.position.set(300, 0.3, TH / 2);
+    Object.assign(m.material, { transparent: true, blending: T.AdditiveBlending, depthWrite: false });
+    m.renderOrder = 1; scene.add(m); V3.mirror = m;
+  }
+
+  // hele bordet heller oppover bort fra spilleren, som på et ekte flipperbord
+  const root = new T.Group(); root.rotation.x = TILT;
+  for (const o of [...scene.children]) if (!(o.isHemisphereLight || o.isDirectionalLight)) root.add(o);
+  V3.aniso = aniso; root.add(makeCarts(T));
+  scene.add(root); root.updateMatrixWorld(true);
+  const panoGeo = new T.CylinderGeometry(2600, 2600, 1500, 64, 1, true);
+  V3.pano = [0, 1].map(() => { const m = new T.Mesh(panoGeo, new T.MeshBasicMaterial({ side: T.BackSide, transparent: true, opacity: 0, depthWrite: false, fog: false })); root.add(m); return m; });
+  V3.camL = [300, 0, 0]; V3.root = root; V3.v2 = new T.Vector3();
+
+  if (post) {
+    const fx = new post.EffectComposer(R, new T.WebGLRenderTarget(1, 1, { type: T.HalfFloatType, samples: 4 }));
+    fx.addPass(new post.RenderPass(scene, cam));
+    V3.bloom = new post.UnrealBloomPass(new T.Vector2(256, 256), 0.32, 0.3, 0.92);
+    fx.addPass(V3.bloom);
+    // fartsuskarphet: bildet strekkes ut fra midten når kula suser av gårde
+    V3.blur = new post.ShaderPass({
+      uniforms: { tDiffuse: { value: null }, strength: { value: 0 } },
+      vertexShader: 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse;\nuniform float strength;\nvarying vec2 vUv;\nvoid main() {\n  vec2 d = (vUv - vec2(0.5, 0.45)) * strength;\n  vec4 c = vec4(0.0);\n  for (int i = 0; i < 10; i++) c += texture2D(tDiffuse, vUv - d * float(i) / 9.0);\n  gl_FragColor = c / 10.0;\n}'
+    });
+    V3.blur.enabled = false;
+    fx.addPass(V3.blur); fx.addPass(new post.OutputPass());
+    V3.fx = fx;
+  }
+  V3.aniso = aniso; V3.bzT = V3.bz || secTop(0) + 1000; V3.kick = 0;
+  const small = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+  setQuality(small ? 1 : 2); V3.grace = 5;
+  V3.px = ball.x; V3.pz = ball.y; V3.bz = secTop(0) + 1000;
+}
+
+// kvalitetstrinn: 2 = speiling, glass og glød med kantutjevning, 1 = bare glød, 0 = rett til skjermen
+function setQuality(q) {
+  V3.q = q; V3.slow = 0; V3.grace = 3;
+  if (V3.mirror) V3.mirror.visible = q >= 2;
+  if (V3.fx) for (const rt of [V3.fx.renderTarget1, V3.fx.renderTarget2]) { const n = q >= 2 ? 4 : 0; if (rt.samples !== n) { rt.samples = n; rt.dispose(); } }
+  if (V3.ready) { sync3d(); console.info('3D-kvalitet:', ['lav', 'middels', 'høy'][q]); }
+}
+
+// omgivelser ved siden av bordet: neongulv i verdenens farger og svevende piksel-ikoner i ulik størrelse og avstand
+const SIDE_W = 1300;
+function addScenery(T, s, group) {
+  const Wd = WORLDS[s], T0 = secTop(s), rand = mulberry32(77 + s * 13);
+  if (!V3.gridTex) {
+    const c = mkCanvas(128, 128), g = c.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 128, 3); g.fillRect(0, 0, 3, 128);
+    V3.gridTex = new T.CanvasTexture(c); V3.gridTex.wrapS = V3.gridTex.wrapT = T.RepeatWrapping;
+    V3.gridTex.repeat.set(SIDE_W / 100, 10); V3.gridTex.anisotropy = V3.R.capabilities.getMaxAnisotropy();
+    V3.groundGeo = new T.PlaneGeometry(SIDE_W, 1000).rotateX(-Math.PI / 2);
+    V3.voxGeo = new T.BoxGeometry(12, 12, 12);
+  }
+  const ground = new T.MeshStandardMaterial({ color: mixHex(Wd.dark, '#000000', 0.25), emissive: Wd.accent, emissiveMap: V3.gridTex, emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.2 });
+  for (const x of [-SIDE_W / 2, 600 + SIDE_W / 2]) { const g = new T.Mesh(V3.groundGeo, ground); g.position.set(x, -4, T0 + 500); group.add(g); }
+  const px = ICONS[Wd.icon].flatMap((row, j) => [...row].map((c, i) => c === '#' ? [i, j] : null).filter(Boolean));
+  const mats = [Wd.accent, Wd.accent2].map(c => new T.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.4, roughness: 0.25, metalness: 0.3 }));
+  const icons = [];
+  for (let k = 0; k < 6; k++) {
+    const left = k % 2 === 0, sc = 0.6 + rand() * 1.1;
+    let dist = 90 + rand() * 480; if (dist > 110 && dist < 350) dist += 250;
+    const im = new T.InstancedMesh(V3.voxGeo, mats[k % 3 === 2 ? 1 : 0], px.length), d = new T.Object3D(), ic = new T.Group();
+    px.forEach(([i, j], n) => { d.position.set((i - 3.5) * 13, (3.5 - j) * 13, 0); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
+    ic.add(im); ic.scale.setScalar(sc);
+    ic.position.set(left ? -dist : 600 + dist, 0, T0 + 80 + rand() * 840);
+    Object.assign(ic.userData, { y: 60 * sc + 20 + rand() * 200, ph: rand() * 6.3, spin: (0.3 + rand() * 0.7) * (rand() < 0.5 ? -1 : 1) });
+    group.add(ic); icons.push(ic);
+  }
+  return { icons };
+}
+
+// panorama av verdenen rundt horisonten: følger kameraet og tones over til neste verden
+function panoCanvas(s) {
+  const c = mkCanvas(1024, 384), g = c.getContext('2d'), Wd = WORLDS[s], n = 6, w = 1024 / n;
+  g.imageSmoothingEnabled = false;
+  for (let i = 0; i < n; i++) {
+    g.save(); if (i % 2) { g.translate((i + 1) * w, 0); g.scale(-1, 1); } else g.translate(i * w, 0);
+    g.drawImage(BGS[s], 0, 0, w, 384); g.restore();
+  }
+  const fade = g.createLinearGradient(0, 0, 0, 384);
+  fade.addColorStop(0, Wd.dark); fade.addColorStop(0.3, rgba(Wd.dark, 0)); fade.addColorStop(0.92, rgba(Wd.dark, 0)); fade.addColorStop(1, rgba(Wd.dark, 0.6));
+  g.fillStyle = fade; g.fillRect(0, 0, 1024, 384);
+  return c;
+}
+function setPano(s) {
+  const T = V3.T, [a, b] = V3.pano, inc = a.material.opacity >= b.material.opacity ? b : a, out = inc === a ? b : a;
+  if (inc.material.map) inc.material.map.dispose();
+  const tex = new T.CanvasTexture(panoCanvas(s)); tex.colorSpace = T.SRGBColorSpace; tex.magFilter = T.NearestFilter;
+  inc.material.map = tex; inc.material.needsUpdate = true; inc.material.opacity = V3.panoIn ? 0 : 1; out.material.opacity = V3.panoIn ? 1 : 0;
+  V3.panoIn = inc;
+}
+
+// vogner på skinner langs hver side av bordet: poengtavla til venstre, Joachim til høyre.
+// De kjører fram og tilbake til seksjonen du spiller i når du bytter nivå.
+const HUD_ASPECT = 1.05, CART_L = -230, CART_R = 830, WHEEL_R = 16;
+const hud3d = () => use3d() && V3.mode === 'base' && SW / SHs >= HUD_ASPECT;
+function makeCarts(T) {
+  const out = new T.Group();
+  V3.boxNeon = new T.MeshBasicMaterial({ color: 0xffffff });
+  const metal = new T.MeshStandardMaterial({ color: 0x4a4658, metalness: 0.4, roughness: 0.28 });
+  const chromeM = new T.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.1 });
+  // skinner og sviller hele veien opp
+  const sleepers = [];
+  for (const cx of [CART_L, CART_R]) {
+    for (const dx of [-62, 62]) { const r = new T.Mesh(new T.BoxGeometry(5, 5, TH), chromeM); r.position.set(cx + dx, -2.5, TH / 2); out.add(r); }
+    for (let z = 40; z < TH; z += 80) sleepers.push([cx, z]);
+  }
+  const sl = new T.InstancedMesh(new T.BoxGeometry(150, 3, 14), new T.MeshStandardMaterial({ color: 0x2a2630, roughness: 0.7 }), sleepers.length), d = new T.Object3D();
+  sleepers.forEach(([x, z], i) => { d.position.set(x, -4, z); d.updateMatrix(); sl.setMatrixAt(i, d.matrix); });
+  out.add(sl);
+  const wheelGeo = new T.CylinderGeometry(WHEEL_R, WHEEL_R, 10, 20).rotateZ(Math.PI / 2);
+  const cart = x => {
+    const g = new T.Group(), chassis = new T.Group(), top = new T.Group(), wheels = [];
+    const deck = new T.Mesh(new T.BoxGeometry(150, 22, 120), metal); deck.position.y = 36;
+    const stripe = new T.Mesh(new T.BoxGeometry(153, 3, 123), V3.boxNeon); stripe.position.y = 36;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const w = new T.Mesh(wheelGeo, chromeM); w.position.set(sx * 62, WHEEL_R, sz * 40); g.add(w); wheels.push(w);
+      const lamp = new T.Mesh(new T.BoxGeometry(14, 6, 2), sz > 0 ? V3.boxNeon : new T.MeshBasicMaterial({ color: new T.Color(1.6, 0.1, 0.1) }));
+      lamp.position.set(sx * 50, 38, sz * 61); chassis.add(lamp);
+    }
+    top.position.y = 47; chassis.add(deck, stripe, top); g.add(chassis); out.add(g);
+    return { g, chassis, top, wheels, x, z: null, v: 0, pitch: 0 };
+  };
+  // poengtavla på en mast
+  const L = cart(CART_L);
+  for (const sx of [-60, 60]) { const m = new T.Mesh(new T.CylinderGeometry(3, 3, 170, 10), chromeM); m.position.set(sx, 85, 0); L.top.add(m); }
+  const house = new T.Mesh(new T.BoxGeometry(410, 100, 30), metal); house.position.y = 205; L.top.add(house);
+  for (const [w, h, x, y] of [[414, 3, 0, 256], [414, 3, 0, 154], [3, 104, -206, 205], [3, 104, 206, 205]]) {
+    const m = new T.Mesh(new T.BoxGeometry(w, h, 32), V3.boxNeon); m.position.set(x, y, 0); L.top.add(m);
+  }
+  // punktmatrise: 4 bildepunkter per prikk, mørke hull mellom prikkene
+  V3.dmdC = mkCanvas(640, 128); V3.dmdG = V3.dmdC.getContext('2d');
+  V3.dmdMask = mkCanvas(640, 128); V3.dmdDim = mkCanvas(640, 128);
+  const mk = V3.dmdMask.getContext('2d'), dm = V3.dmdDim.getContext('2d');
+  mk.fillStyle = '#050304'; mk.fillRect(0, 0, 640, 128); mk.globalCompositeOperation = 'destination-out'; dm.fillStyle = '#2a1405';
+  for (let j = 0; j < DMD_H; j++) for (let i = 0; i < DMD_W; i++) {
+    mk.beginPath(); mk.arc(i * 4 + 2, j * 4 + 2, 1.75, 0, 7); mk.fill();
+    dm.beginPath(); dm.arc(i * 4 + 2, j * 4 + 2, 1.6, 0, 7); dm.fill();
+  }
+  V3.dmdTex = new T.CanvasTexture(V3.dmdC); V3.dmdTex.colorSpace = T.SRGBColorSpace;
+  const face = new T.Mesh(new T.PlaneGeometry(390, 78), new T.MeshBasicMaterial({ map: V3.dmdTex, color: new T.Color(1.35, 1.35, 1.35) }));
+  face.position.set(0, 205, 15.5); L.top.add(face);
+  // Joachim står på den andre vogna
+  const R = cart(CART_R);
+  V3.jo = makeJoachim(T); R.top.add(V3.jo.g);
+  // snakkeboble som alltid vender mot kameraet
+  V3.bubC = mkCanvas(1024, 480); V3.bubG = V3.bubC.getContext('2d');
+  V3.bubTex = new T.CanvasTexture(V3.bubC); V3.bubTex.colorSpace = T.SRGBColorSpace; V3.bubTex.anisotropy = V3.aniso || 4;
+  V3.bubble = new T.Mesh(new T.PlaneGeometry(420, 420 * 480 / 1024), new T.MeshBasicMaterial({ map: V3.bubTex, color: new T.Color(0.9, 0.9, 0.9), transparent: true, depthTest: false, fog: false }));
+  V3.bubble.renderOrder = 20; out.add(V3.bubble); V3.bubT = 99;
+  V3.carts = [L, R]; V3.cartGroup = out;
+  return out;
+}
+
+// Joachim i 3D, modellert i Blender (scripts/joachim.blend.py). Står på en gullskive med skilt på vogna.
+const JO_SCALE = 195;
+function makeJoachim(T) {
+  const g = new T.Group();
+  const gold = new T.MeshStandardMaterial({ color: 0xffc860, metalness: 1, roughness: 0.22 });
+  const disc = new T.Mesh(new T.CylinderGeometry(62, 68, 12, 32), gold); disc.position.y = 6; g.add(disc);
+  const pc = mkCanvas(512, 96), pg = pc.getContext('2d');
+  pg.fillStyle = '#2a1a08'; pg.fillRect(0, 0, 512, 96); pg.strokeStyle = '#ffd98a'; pg.lineWidth = 6; pg.strokeRect(3, 3, 506, 90);
+  pg.fillStyle = '#ffd98a'; pg.textAlign = 'center'; pg.textBaseline = 'middle';
+  pg.font = 'bold 40px Arial, sans-serif'; pg.fillText('JOACHIM', 256, 34); pg.font = 'bold 20px Arial, sans-serif'; pg.fillText('SELVUTNEVNT VERDENSMESTER', 256, 70);
+  const pt = new T.CanvasTexture(pc); pt.colorSpace = T.SRGBColorSpace;
+  const plaque = new T.Mesh(new T.PlaneGeometry(140, 26), new T.MeshStandardMaterial({ map: pt, roughness: 0.3, metalness: 0.5 }));
+  plaque.position.set(0, 26, 62); g.add(plaque);
+  const J = { g, model: null, head: null, jaw: null, arms: [], talk: 0 };
+  if (V3.post && V3.post.GLTFLoader) new V3.post.GLTFLoader().load('joachim.glb', gltf => {
+    const m = gltf.scene; m.scale.setScalar(JO_SCALE); m.position.y = 12;
+    m.traverse(o => { if (o.isMesh && o.material.name === 'Lens') Object.assign(o.material, { transparent: true, opacity: 0.25, depthWrite: false }); });
+    g.add(m);
+    Object.assign(J, { model: m, head: m.getObjectByName('Head'), jaw: m.getObjectByName('Jaw'), arms: [m.getObjectByName('ArmL'), m.getObjectByName('ArmR')] });
+  }, undefined, err => console.warn('Joachim-modellen lastet ikke:', err));
+  return J;
+}
+
+function drawBubble(text) {
+  const g = V3.bubG, W = 1024, H = 480;
+  g.clearRect(0, 0, W, H);
+  g.font = 'bold italic 54px Georgia, serif';
+  const rows = []; let cur = '';
+  for (const w of text.split(' ')) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > W - 150 && cur) { rows.push(cur); cur = w; } else cur = t; }
+  if (cur) rows.push(cur);
+  const lines = rows.slice(0, 5), bh = lines.length * 64 + 70, y0 = H - 110 - bh, r = 44;
+  g.beginPath();
+  g.moveTo(20 + r, y0); g.arcTo(W - 20, y0, W - 20, y0 + bh, r); g.arcTo(W - 20, y0 + bh, 20, y0 + bh, r);
+  g.lineTo(W - 190, y0 + bh); g.lineTo(W - 110, H - 12); g.lineTo(W - 300, y0 + bh);
+  g.arcTo(20, y0 + bh, 20, y0, r); g.arcTo(20, y0, W - 20, y0, r); g.closePath();
+  g.fillStyle = '#e9ddc0'; g.fill(); g.lineWidth = 8; g.strokeStyle = '#1c1626'; g.stroke();
+  g.fillStyle = '#1c1626'; g.textBaseline = 'top'; g.textAlign = 'center';
+  lines.forEach((l, i) => g.fillText(l, W / 2, y0 + 36 + i * 64));
+  V3.bubTex.needsUpdate = true;
+}
+
+function updateCarts(dt, t) {
+  const target = V3.bzT - 640, k = r => 1 - Math.exp(-dt * r);
+  for (const c of V3.carts) {
+    // fjær med litt demping: kjører av gårde, skyter litt over og roer seg
+    if (c.z === null) c.z = target;
+    const a = (target - c.z) * 5 - c.v * 3.2;
+    c.v += a * dt; c.z += c.v * dt;
+    c.g.position.set(c.x, 0, c.z);
+    c.pitch += (clamp(a * 0.00005, -0.14, 0.14) - c.pitch) * k(8);
+    c.chassis.rotation.x = c.pitch;
+    for (const w of c.wheels) w.rotation.x = c.z / WHEEL_R;
+    c.top.rotation.y = clamp(Math.atan2(V3.camL[0] - c.x, V3.camL[2] - c.z), -1.1, 1.1);
+  }
+  // Joachim: kjeven går når portrettet prater, hånda gestikulerer, hodet følger kula og han puster når han står stille
+  const J = V3.jo, R = V3.carts[1], talking = document.querySelector('.jo-portrait').classList.contains('talk');
+  if (J.model) {
+    J.talk += ((clock - JO.last < 3 ? 1 : 0) - J.talk) * k(4);
+    J.jaw.rotation.x += ((talking ? 0.09 : 0) - J.jaw.rotation.x) * k(30);
+    const toBall = Math.atan2(ball.x - R.x, ball.y - R.z) - R.top.rotation.y;
+    J.head.rotation.y += (clamp(Math.atan2(Math.sin(toBall), Math.cos(toBall)), -0.7, 0.7) - J.head.rotation.y) * k(3);
+    J.head.rotation.x = Math.sin(t * 8) * 0.05 * J.talk + Math.sin(t * 1.3) * 0.02;
+    J.head.rotation.z = Math.sin(t * 0.8) * 0.03;
+    // høyre hånd opp og fram mens han prater, venstre henger og svaier
+    J.arms[1].rotation.set(-1.1 * J.talk + Math.sin(t * 6) * 0.15 * J.talk, 0, -0.35 * J.talk);
+    J.arms[0].rotation.set(Math.sin(t * 1.4) * 0.05, 0, 0.05);
+    J.model.scale.set(JO_SCALE, JO_SCALE * (1 + Math.sin(t * 2) * 0.008), JO_SCALE);
+  }
+  // boblen spretter fram når han sier noe nytt og blir borte etter en stund
+  const line = $('joLine').textContent;
+  if (line !== V3.bubKey) { V3.bubKey = line; drawBubble(line); V3.bubT = 0; }
+  V3.bubT += dt;
+  const pop = V3.bubT < 0.3 ? 1 + Math.sin(V3.bubT / 0.3 * Math.PI) * 0.12 : 1, show = V3.bubT < 9;
+  V3.bubble.visible = show;
+  V3.bubble.material.opacity = clamp((9 - V3.bubT) / 0.6, 0, 1);
+  V3.bubble.scale.setScalar(Math.min(1, V3.bubT / 0.15) * pop);
+  V3.bubble.position.set(R.x - 190, 500, R.z);
+  V3.bubble.lookAt(V3.cam.position);
+}
+
+function drawBoxDmd() {
+  const g = V3.dmdG;
+  g.fillStyle = '#050304'; g.fillRect(0, 0, 640, 128);
+  g.drawImage(V3.dmdDim, 0, 0);
+  g.imageSmoothingEnabled = false; g.drawImage(dmdC, 0, 0, 640, 128); g.imageSmoothingEnabled = true;
+  g.drawImage(V3.dmdMask, 0, 0);
+  V3.dmdTex.needsUpdate = true;
+}
+// speilingsmiljø i verdenens farger: lysrør over bordet og neonpaneler rundt
+function neonEnv(s) {
+  const T = V3.T, Wd = WORLDS[s], es = new T.Scene(), geo = new T.BoxGeometry(1, 1, 1), mats = [];
+  es.background = new T.Color(Wd.dark);
+  const add = (c, k, x, y, z, sx, sy, sz) => {
+    const m = new T.MeshBasicMaterial({ color: new T.Color(c).multiplyScalar(k) }), b = new T.Mesh(geo, m);
+    b.position.set(x, y, z); b.scale.set(sx, sy, sz); es.add(b); mats.push(m);
+  };
+  add('#ffffff', 2.5, -3, 9, 0, 1, 0.2, 18); add('#ffffff', 2.5, 3, 9, 0, 1, 0.2, 18);
+  add(Wd.accent, 2, -10, 1, 0, 0.2, 2.5, 20); add(Wd.accent2, 2, 10, 1, 0, 0.2, 2.5, 20);
+  add(Wd.accent2, 2, 0, 2, -12, 16, 3, 0.2); add(Wd.accent, 1.6, 0, 0, 12, 16, 2, 0.2);
+  add(Wd.trail, 2.5, 0, 6, -8, 6, 0.3, 0.3);
+  const rt = V3.pm.fromScene(es, 0.02);
+  geo.dispose(); mats.forEach(m => m.dispose());
+  if (V3.envRT) V3.envRT.dispose();
+  V3.envRT = rt; V3.scene.environment = rt.texture;
+}
+
+function update3dCamera(dt) {
+  const cam = V3.cam, k = r => 1 - Math.exp(-dt * r), bh = ballHeight(), aspect = cam.aspect;
+  const demo = game.state === 'attract' || game.state === 'intro';
+  let fov, pos, look;
+  if (V3.mode === 'ball' && !demo) {
+    // inni kula: se i fartsretningen, jevnt dempet så kameraet ikke rister av hvert sprett
+    const vx = (ball.x - V3.px) / Math.max(dt, 1e-3), vz = (ball.y - V3.pz) / Math.max(dt, 1e-3), sp = dt > 0 ? Math.hypot(vx, vz) : 0;
+    let want = null;
+    if (ball.mode === 'plunger') want = Math.PI;
+    else if (sp > 90 && ball.mode !== 'gone') want = Math.atan2(vx, vz);
+    if (want !== null) {
+      let d = want - V3.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      V3.yaw += d * k(ball.mode === 'lift' ? 9 : clamp(sp / 260, 1.2, 5));
+    }
+    fov = clamp(2 * Math.atan(Math.tan(0.6) / Math.min(1, aspect)) * 180 / Math.PI, 70, 100);
+    const fx = Math.sin(V3.yaw), fz = Math.cos(V3.yaw);
+    // litt bak sentrum, fortsatt inni kula, så en vegg rett foran ikke fyller hele bildet
+    pos = [ball.x - fx * 7, bh + 3, ball.y - fz * 7]; look = [ball.x + fx * 100, bh - 10, ball.y + fz * 100];
+    V3.scene.fog.near = 350; V3.scene.fog.far = 1900;
+  } else {
+    // fra bunnen: stå ved flipperne i seksjonen kula er i, som ved et ekte flipperbord
+    const target = demo ? camY + VH * 0.5 + 520 : secTop(secOf(clamp(ball.y, 0, TH - 1))) + 1000;
+    V3.bzT = target;
+    if (demo) V3.bz = target; else if (ball.mode !== 'gone') V3.bz += (target - V3.bz) * k(2.6);
+    if (ball.mode !== 'gone' && !demo) V3.bx += (ball.x - V3.bx) * k(3); else if (demo) V3.bx = 300;
+    fov = Math.max(62, 2 * Math.atan(Math.tan(0.4) / aspect) * 180 / Math.PI);
+    const ox = (V3.bx - 300);
+    pos = [300 + ox * 0.22, 700, V3.bz + 350]; look = [300 + ox * 0.4, 0, V3.bz - 610];
+    // neste verden synes, den etter der er borte i tåka før den begynner
+    V3.scene.fog.near = 1650; V3.scene.fog.far = 2500;
+  }
+  V3.px = ball.x; V3.pz = ball.y;
+  V3.camL = pos;
+  const sh = REDUCED ? 0 : shake * 0.6, kick = REDUCED ? 0 : V3.kick;
+  if (V3.mode === 'ball' && !demo) fov += kick * 7;
+  else { pos[1] -= kick * 10; pos[2] -= kick * 16; }
+  cam.position.copy(V3.v.set(pos[0] + (Math.random() - 0.5) * sh, pos[1] + (Math.random() - 0.5) * sh, pos[2]).applyMatrix4(V3.root.matrixWorld));
+  cam.lookAt(V3.v2.set(look[0], look[1], look[2]).applyMatrix4(V3.root.matrixWorld));
+  if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+  cam.updateMatrixWorld();
+}
+
+function render3d(t) {
+  const T = V3.T, cw = game.world, Wc = WORLDS[cw];
+  if (V3.dark !== cw) {
+    V3.dark = cw; V3.scene.background.set(Wc.dark); V3.scene.fog.color.set(Wc.dark);
+    neonEnv(cw); V3.ballLight.color.set(Wc.trail); setPano(cw); V3.boxNeon.color.set(Wc.accent).multiplyScalar(1.3);
+  }
+  const dt = clamp(clock - V3.clock, 0, 0.1); V3.clock = clock;
+  V3.kick *= Math.exp(-dt * 9);
+  for (const o of bumpers) { if (o.flash > (o.pf || 0) + 0.3) V3.kick = Math.max(V3.kick, 1); o.pf = o.flash; }
+  for (const o of slings) { if (o.flash > (o.pf || 0) + 0.3) V3.kick = Math.max(V3.kick, 0.6); o.pf = o.flash; }
+  update3dCamera(dt);
+  const play = game.state !== 'attract' && hud3d();
+  if (V3.playCls !== play) { V3.playCls = play; document.body.classList.toggle('v3d-play', play); }
+  const side = hud3d();
+  V3.cartGroup.visible = side;
+  if (side) { updateCarts(dt, t); if ((V3.frame = (V3.frame || 0) + 1) % 2 === 0) drawBoxDmd(); }
+  const pin = V3.panoIn, pout = V3.pano[0] === pin ? V3.pano[1] : V3.pano[0];
+  pin.material.opacity = Math.min(1, pin.material.opacity + dt * 1.2); pout.material.opacity = 1 - pin.material.opacity;
+  // står på bordplanet rundt kameraet, så horisonten følger det skrå bordet
+  for (const pm of V3.pano) { pm.position.set(V3.camL[0], 690, V3.camL[2]); pm.visible = pm.material.opacity > 0.01; }
+  const focus = secOf(clamp(V3.mode === 'ball' ? ball.y : V3.bz - 500, 0, TH - 1));
+  // bare verdenene kameraet faktisk ser: bunnkameraet ser oppover, kula kan se begge veier
+  const lo = focus - (V3.mode === 'ball' ? 2 : 1), hi = focus + (V3.mode === 'ball' ? 2 : 1);
+  V3.secs.forEach((sec, s) => {
+    const on = s >= lo && s <= hi, m = sec.floor.material;
+    sec.group.visible = on;
+    if (on) for (const ic of sec.side.icons) { const u = ic.userData; ic.rotation.y = t * u.spin + u.ph; ic.position.y = u.y + Math.sin(t * 1.3 + u.ph) * 14; }
+    if (on && !sec.tex) {
+      sec.tex = new T.CanvasTexture(floorCanvas(s)); sec.tex.colorSpace = T.SRGBColorSpace; sec.tex.anisotropy = V3.aniso;
+      m.emissiveMap = sec.tex; m.emissive.set(0xffffff); m.needsUpdate = true;
+    } else if (!on && sec.tex && Math.abs(s - focus) > 5) {
+      sec.tex.dispose(); sec.tex = null; m.emissiveMap = null; m.emissive.set(0x111111); m.needsUpdate = true;
+    }
+  });
+  const near = o => o.s >= lo && o.s <= hi;
+  for (const f of flippers) if (near(f)) { f.m3.rotation.y = -f.a; f.m3.material = f.on ? V3.secs[f.s].flipOn : V3.secs[f.s].flipOff; }
+  for (const c of bumpers) if (near(c)) {
+    const q = 1 + c.flash * 0.1; c.m3.scale.set(q, 1 + c.flash * 0.12, q);
+    c.m3.material[0].emissiveIntensity = 0.25 + c.flash * 2.5;
+    c.ring3.material.color.set(c.flash > 0 ? mixHex(WORLDS[c.s].accent, '#ffffff', c.flash) : WORLDS[c.s].accent).multiplyScalar(1.1 + c.flash * 2.5);
+  }
+  for (const w of targets) if (near(w)) {
+    const m = w.m3.material, Wd = WORLDS[w.s];
+    m.emissive.set(w.flash > 0 ? mixHex(Wd.accent, '#ffffff', w.flash) : Wd.accent); m.emissiveIntensity = w.flash > 0 ? 1.5 + w.flash * 2 : w.lit ? 1.6 : 0.15;
+  }
+  for (const k of slings) if (near(k)) k.m3.material.emissiveIntensity = 0.2 + k.flash * 3;
+  for (const sa of saucers) if (near(sa)) sa.m3.material.opacity = 0.35 + 0.35 * Math.max(0, Math.sin(t * 5)) + sa.flash * 0.3;
+  const show = ball.mode !== 'gone' && game.state !== 'attract', bh = ballHeight();
+  V3.ball.visible = show && V3.mode !== 'ball';
+  V3.ball.position.set(ball.x, bh, ball.y); V3.ball.rotation.set(ball.y / BR, 0, -ball.x / BR);
+  V3.glow.visible = show; V3.glow.position.set(ball.x, 0.8 + (bh - BR), ball.y);
+  V3.glow.material.color.set(Wc.trail); V3.glow.material.opacity = V3.mode === 'ball' ? 0.12 : 0.28;
+  V3.ballLight.visible = show; V3.ballLight.position.set(ball.x, bh + 40, ball.y);
+
+  // gnister: høyde etter hvor langt de har fløyet, farget etter levetid
+  const sp = V3.sparks.geometry, spp = sp.attributes.position.array, spc = sp.attributes.color.array;
+  const n = Math.min(parts.length, 420);
+  for (let i = 0; i < n; i++) {
+    const p = parts[i], a = Math.min(1, p.life * 2) * 2.2;
+    spp[i * 3] = p.x; spp[i * 3 + 1] = 10 + (1 - p.life) * 60 + (i % 5) * 3; spp[i * 3 + 2] = p.y;
+    col3.set(p.col); spc[i * 3] = col3.r * a; spc[i * 3 + 1] = col3.g * a; spc[i * 3 + 2] = col3.b * a;
+  }
+  sp.setDrawRange(0, n); sp.attributes.position.needsUpdate = sp.attributes.color.needsUpdate = true;
+  const tg = V3.trail.geometry, tp = tg.attributes.position.array, tc = tg.attributes.color.array;
+  const m = show && V3.mode !== 'ball' ? trail.length : 0;
+  col3.set(Wc.trail);
+  for (let i = 0; i < m; i++) {
+    const a = Math.pow((i + 1) / m, 2) * 0.35;
+    tp[i * 3] = trail[i][0]; tp[i * 3 + 1] = bh; tp[i * 3 + 2] = trail[i][1];
+    tc[i * 3] = col3.r * a; tc[i * 3 + 1] = col3.g * a; tc[i * 3 + 2] = col3.b * a;
+  }
+  tg.setDrawRange(0, m); tg.attributes.position.needsUpdate = tg.attributes.color.needsUpdate = true;
+
+  for (let s = Math.max(0, lo); s <= Math.min(NS - 1, hi); s++) {
+    const sec = V3.secs[s];
+    sec.lanes.forEach((l, i) => {
+      const c = s === NS - 1 ? '#ffe94d' : game.express[s] ? '#ffd23d' : WORLDS[s].accent2;
+      for (let j = 0; j < 3; j++) sec.chev.setColorAt(i * 3 + j, col3.set(c).multiplyScalar(0.12 + 1.25 * Math.max(0, Math.sin(t * 5 - j * 1.1)) + l.glow));
+    });
+    sec.chev.instanceColor.needsUpdate = true;
+    const sa = sec.saucer;
+    for (let j = 0; j < 8; j++) {
+      const a = t * 2 + j * Math.PI / 4, on = (j + Math.floor(t * 8)) % 8 < 3 || sa.flash > 0;
+      V3.dummy.position.set(sa.x + Math.cos(a) * 28, 0.8, sa.y + Math.sin(a) * 28); V3.dummy.rotation.set(0, -a, 0); V3.dummy.updateMatrix();
+      sec.dots.setMatrixAt(j, V3.dummy.matrix); sec.dots.setColorAt(j, col3.set(WORLDS[s].accent2).multiplyScalar(on ? 1.4 : 0.15));
+    }
+    sec.dots.instanceMatrix.needsUpdate = sec.dots.instanceColor.needsUpdate = true;
+  }
+  const up = bh - BR;
+  V3.shadow.visible = show;
+  V3.shadow.position.set(ball.x + SHADOW[0] * (up + 8), 0.5, ball.y + SHADOW[1] * (up + 8));
+  V3.shadow.scale.setScalar(1 + up / 70); V3.shadow.material.opacity = 0.7 / (1 + up / 35);
+  V3.glass.visible = V3.q >= 2 && (V3.mode !== 'ball' || game.state === 'attract' || game.state === 'intro');
+  V3.glass.position.z = V3.bz - 1000;   // bare glass der kameraet ser, så det ikke lyser langt inn i tåka
+  if (V3.blur) {
+    const speed = ball.mode === 'lift' ? ball.liftV : ball.mode === 'free' ? Math.hypot(ball.vx, ball.vy) : 0;
+    const b = V3.mode === 'ball' && !REDUCED && game.state === 'play' ? clamp((speed - 700) / 2600, 0, 1) * 0.07 : 0;
+    V3.blur.uniforms.strength.value += (b - V3.blur.uniforms.strength.value) * Math.min(1, dt * 8);
+    V3.blur.enabled = V3.blur.uniforms.strength.value > 0.003;
+  }
+  // tregt apparat: gå ned et kvalitetstrinn om bildene kommer for sjelden en stund (ikke rett etter oppstart)
+  V3.grace -= dt;
+  if (V3.q > 0 && V3.grace < 0) {
+    V3.slow = emaDt > 0.026 ? V3.slow + dt : Math.max(0, V3.slow - dt * 0.5);
+    if (V3.slow > 2.5) setQuality(V3.q - 1);
+  }
+  if (V3.fx && V3.q >= 1) V3.fx.render(); else V3.R.render(V3.scene, V3.cam);
+}
+
+// skjermpunkt for et punkt på bordet (til poengtekster og gnister oppå 3D-bildet)
+function project3d(x, h, y) {
+  const v = V3.v.set(x, h, y).applyMatrix4(V3.root.matrixWorld), c = V3.cam.position;
+  V3.fwd.set(0, 0, -1).applyQuaternion(V3.cam.quaternion);
+  const dz = (v.x - c.x) * V3.fwd.x + (v.y - c.y) * V3.fwd.y + (v.z - c.z) * V3.fwd.z;
+  if (dz < 2) return null;
+  v.project(V3.cam);
+  if (v.x < -1.2 || v.x > 1.2 || v.y < -1.2 || v.y > 1.2) return null;
+  const h3 = SHs - V3.top;
+  return [(v.x + 1) / 2 * SW, V3.top + (1 - v.y) / 2 * h3, h3 / 2 / Math.tan(V3.cam.fov * Math.PI / 360) / dz];
+}
+function render3dOverlay(t) {
+  const cw = game.world;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, SW, SHs);
+  if (V3.top > 0) {
+    ctx.fillStyle = WORLDS[cw].dark; ctx.fillRect(0, 0, SW, V3.top);
+    const fade = ctx.createLinearGradient(0, V3.top, 0, V3.top + 40);
+    fade.addColorStop(0, rgba(WORLDS[cw].dark, 1)); fade.addColorStop(1, rgba(WORLDS[cw].dark, 0));
+    ctx.fillStyle = fade; ctx.fillRect(0, V3.top, SW, 40);
+  }
+  ctx.beginPath(); ctx.rect(0, V3.top, SW, SHs - V3.top); ctx.save(); ctx.clip();
+  ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+  for (const p of pops) {
+    const q = project3d(p.x, 50 + (1.1 - p.life) * 40, p.y); if (!q) continue;
+    ctx.font = Math.round(clamp(16 * q[2], 9, 30)) + 'px "Press Start 2P", monospace';
+    ctx.globalAlpha = Math.min(1, p.life * 2); ctx.strokeText(p.text, q[0], q[1]); ctx.fillStyle = p.col; ctx.fillText(p.text, q[0], q[1]);
+  }
+  ctx.globalAlpha = 1;
+  if (V3.mode === 'ball' && game.state !== 'attract') {
+    // krom-kanten på innsiden av kula
+    const cx = SW / 2, cy = (V3.top + SHs) / 2, r = Math.hypot(SW, SHs - V3.top) / 2;
+    const g = ctx.createRadialGradient(cx, cy, r * 0.62, cx, cy, r);
+    g.addColorStop(0, 'rgba(200,210,235,0)'); g.addColorStop(0.75, 'rgba(200,210,235,0.10)'); g.addColorStop(1, 'rgba(230,236,255,0.38)');
+    ctx.fillStyle = g; ctx.fillRect(0, V3.top, SW, SHs - V3.top);
+  }
+  ctx.restore();
+  if (game.state === 'plunger') {
+    const ch = input.charge, x = SW - 30, y1 = SHs - 90, hh = Math.min(200, (SHs - V3.top) * 0.4);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 2, y1 - hh - 2, 12, hh + 4);
+    const gr = ctx.createLinearGradient(0, y1, 0, y1 - hh); gr.addColorStop(0, '#ffd23d'); gr.addColorStop(1, '#ff3d3d');
+    ctx.fillStyle = gr; ctx.fillRect(x, y1 - hh * ch, 8, hh * ch);
+  }
+  drawHud(t, cw);
+}
+
 /* oppstart */
 function buildMenu() {
   const ol = $('tower'); ol.innerHTML = '';
@@ -2350,6 +3115,10 @@ function boot(data) {
   $('btnResume').addEventListener('click', () => setPause(false));
   $('btnPause').addEventListener('click', () => setPause(true));
   $('btnSound').addEventListener('click', () => { setSound(!AU.on); syncSoundIcon(); });
+  $('btnView').addEventListener('click', cycleView);
+  $('btnViewMenu').addEventListener('click', cycleView);
+  syncViewLabels();
+  if (V3.mode !== '2d') load3d();
   if (document.fonts && document.fonts.load) document.fonts.load('8px "Press Start 2P"').catch(() => {});
   requestAnimationFrame(t => { last = t; frame(t); });
 }

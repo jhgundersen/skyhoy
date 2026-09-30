@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createLeaderboardHandler, openDatabase } from './leaderboard.mjs';
 
@@ -44,6 +45,7 @@ const server = createServer(async (req, res) => {
    return res.end(await response.text());
   }
   if (STATIC_INDEX && (path === '/' || path === '/index.html')) return send(200, await readFile(STATIC_INDEX), 'text/html; charset=utf-8');
+  if (STATIC_INDEX && path === '/joachim.glb') return send(200, await readFile(join(dirname(STATIC_INDEX), 'joachim.glb')), 'model/gltf-binary');
   send(404, '{"error":"Ikke funnet."}');
  } catch (error) {
   console.error('Request failed:', error?.message || 'unknown');

@@ -3,6 +3,7 @@
 Browser game with 32 levels and a global top 100 leaderboard. Live at https://skyhoy.jonh.no.
 
 - `public/index.html`: the whole game. Joachim's commentary portrait (closed and talking frames) is embedded as PNG, cropped from Joachim in `assets/characters.png` in [quest-for-story](https://github.com/jhgundersen/quest-for-story).
+- `public/joachim.glb`: Joachim in 3D for the 3D cameras, loaded only when a 3D view is chosen. Built from `scripts/joachim.blend.py` with `blender -b --factory-startup -P scripts/joachim.blend.py` (after the character sheet in quest-for-story); the nodes `Head`, `Jaw`, `ArmL` and `ArmR` are animated by the game.
 - `server/leaderboard.mjs`: leaderboard logic on SQLite via the built-in `node:sqlite` (Node 22.13+). No npm dependencies.
 - `server/app.mjs`: HTTP server for `/api/leaderboard` and `/api/health`, with a limit of 40 requests per minute per IP.
 
