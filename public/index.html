@@ -2782,8 +2782,30 @@ function makeCarts(T) {
   return out;
 }
 
-// Joachim i 3D, modellert i Blender (scripts/joachim.blend.py). Står på en gullskive med skilt på vogna.
-const JO_SCALE = 195;
+// Joachim i 3D: figurarket i quest-for-story ble til et rent forfra-bilde med Flux 2 Klein og så modell med Pixal3D i ComfyUI, gjort klar med
+// scripts/joachim_prep.blend.py. Modellen er ett stykke uten skjelett, så hode og kjeve bøyes i
+// skygge-koden: alt over nakken dreier rundt nakken, og skjegget under munnen trekkes ned når han prater.
+// Tallene er fra prep-skriptet (meter, føttene i origo, 1,8 m høy, ser mot +z).
+const JO_SCALE = 195, JO_NECK = 1.314, JO_MOUTH = 1.449, JO_FACE_Z = 0.175, JO_FACE_X = 0.023;
+function joDeform(material, U) {
+  material.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = 'uniform float uJaw, uYaw, uPitch;\n' + sh.vertexShader
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        float joH = smoothstep(${JO_NECK - 0.08}, ${JO_NECK + 0.05}, position.y);
+        float joCy = cos(uYaw * joH), joSy = sin(uYaw * joH), joCp = cos(uPitch * joH), joSp = sin(uPitch * joH);
+        objectNormal = vec3(joCy * objectNormal.x + joSy * objectNormal.z, objectNormal.y, -joSy * objectNormal.x + joCy * objectNormal.z);
+        objectNormal = vec3(objectNormal.x, joCp * objectNormal.y - joSp * objectNormal.z, joSp * objectNormal.y + joCp * objectNormal.z);`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float joBelow = smoothstep(${JO_MOUTH + 0.005}, ${JO_MOUTH - 0.03}, transformed.y) * smoothstep(${JO_NECK - 0.12}, ${JO_NECK}, transformed.y);
+        float joFront = smoothstep(${JO_FACE_Z - 0.16}, ${JO_FACE_Z - 0.05}, transformed.z) * (1.0 - smoothstep(0.06, 0.15, abs(transformed.x - ${JO_FACE_X})));
+        transformed.y -= uJaw * 0.07 * joBelow * joFront;
+        vec3 joQ = transformed - vec3(0.0, ${JO_NECK}, 0.0);
+        joQ = vec3(joCy * joQ.x + joSy * joQ.z, joQ.y, -joSy * joQ.x + joCy * joQ.z);
+        joQ = vec3(joQ.x, joCp * joQ.y - joSp * joQ.z, joSp * joQ.y + joCp * joQ.z);
+        transformed = joQ + vec3(0.0, ${JO_NECK}, 0.0);`);
+  };
+}
 function makeJoachim(T) {
   const g = new T.Group();
   const gold = new T.MeshStandardMaterial({ color: 0xffc860, metalness: 1, roughness: 0.22 });
@@ -2795,12 +2817,13 @@ function makeJoachim(T) {
   const pt = new T.CanvasTexture(pc); pt.colorSpace = T.SRGBColorSpace;
   const plaque = new T.Mesh(new T.PlaneGeometry(140, 26), new T.MeshStandardMaterial({ map: pt, roughness: 0.3, metalness: 0.5 }));
   plaque.position.set(0, 26, 62); g.add(plaque);
-  const J = { g, model: null, head: null, jaw: null, arms: [], talk: 0 };
+  const U = { uJaw: { value: 0 }, uYaw: { value: 0 }, uPitch: { value: 0 } };
+  const J = { g, model: null, U, talk: 0, yaw: 0 };
   if (V3.post && V3.post.GLTFLoader) new V3.post.GLTFLoader().load('joachim.glb', gltf => {
     const m = gltf.scene; m.scale.setScalar(JO_SCALE); m.position.y = 12;
-    m.traverse(o => { if (o.isMesh && o.material.name === 'Lens') Object.assign(o.material, { transparent: true, opacity: 0.25, depthWrite: false }); });
-    g.add(m);
-    Object.assign(J, { model: m, head: m.getObjectByName('Head'), jaw: m.getObjectByName('Jaw'), arms: [m.getObjectByName('ArmL'), m.getObjectByName('ArmR')] });
+    // litt egenlys fra fargeteksturen så han ikke drukner i det mørke rommet
+    m.traverse(o => { if (o.isMesh) { const mt = o.material; Object.assign(mt, { emissiveMap: mt.map, envMapIntensity: 1.3 }); mt.emissive.set(0x4a4a4a); joDeform(mt, U); } });
+    g.add(m); J.model = m;
   }, undefined, err => console.warn('Joachim-modellen lastet ikke:', err));
   return J;
 }
@@ -2836,18 +2859,17 @@ function updateCarts(dt, t) {
     for (const w of c.wheels) w.rotation.x = c.z / WHEEL_R;
     c.top.rotation.y = clamp(Math.atan2(V3.camL[0] - c.x, V3.camL[2] - c.z), -1.1, 1.1);
   }
-  // Joachim: kjeven går når portrettet prater, hånda gestikulerer, hodet følger kula og han puster når han står stille
+  // Joachim: munnen går når portrettet prater, hodet følger kula og nikker, kroppen vugger litt når han snakker
   const J = V3.jo, R = V3.carts[1], talking = document.querySelector('.jo-portrait').classList.contains('talk');
   if (J.model) {
     J.talk += ((clock - JO.last < 3 ? 1 : 0) - J.talk) * k(4);
-    J.jaw.rotation.x += ((talking ? 0.09 : 0) - J.jaw.rotation.x) * k(30);
+    J.U.uJaw.value += ((talking ? 1 : 0) - J.U.uJaw.value) * k(30);
     const toBall = Math.atan2(ball.x - R.x, ball.y - R.z) - R.top.rotation.y;
-    J.head.rotation.y += (clamp(Math.atan2(Math.sin(toBall), Math.cos(toBall)), -0.7, 0.7) - J.head.rotation.y) * k(3);
-    J.head.rotation.x = Math.sin(t * 8) * 0.05 * J.talk + Math.sin(t * 1.3) * 0.02;
-    J.head.rotation.z = Math.sin(t * 0.8) * 0.03;
-    // høyre hånd opp og fram mens han prater, venstre henger og svaier
-    J.arms[1].rotation.set(-1.1 * J.talk + Math.sin(t * 6) * 0.15 * J.talk, 0, -0.35 * J.talk);
-    J.arms[0].rotation.set(Math.sin(t * 1.4) * 0.05, 0, 0.05);
+    J.yaw += (clamp(Math.atan2(Math.sin(toBall), Math.cos(toBall)), -0.6, 0.6) - J.yaw) * k(3);
+    J.U.uYaw.value = J.yaw;
+    J.U.uPitch.value = Math.sin(t * 8) * 0.06 * J.talk + Math.sin(t * 1.3) * 0.02;
+    J.model.rotation.z = Math.sin(t * 3) * 0.025 * J.talk + Math.sin(t * 0.8) * 0.01;
+    J.model.position.y = 12 + Math.abs(Math.sin(t * 6)) * 4 * J.talk;
     J.model.scale.set(JO_SCALE, JO_SCALE * (1 + Math.sin(t * 2) * 0.008), JO_SCALE);
   }
   // boblen spretter fram når han sier noe nytt og blir borte etter en stund

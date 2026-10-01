@@ -3,7 +3,7 @@
 Browser game with 32 levels and a global top 100 leaderboard. Live at https://skyhoy.jonh.no.
 
 - `public/index.html`: the whole game. Joachim's commentary portrait (closed and talking frames) is embedded as PNG, cropped from Joachim in `assets/characters.png` in [quest-for-story](https://github.com/jhgundersen/quest-for-story).
-- `public/joachim.glb`: Joachim in 3D for the 3D cameras, loaded only when a 3D view is chosen. Built from `scripts/joachim.blend.py` with `blender -b --factory-startup -P scripts/joachim.blend.py` (after the character sheet in quest-for-story); the nodes `Head`, `Jaw`, `ArmL` and `ArmR` are animated by the game.
+- `public/joachim.glb`: Joachim in 3D for the 3D cameras, loaded only when a 3D view is chosen. His idle sprite in quest-for-story `assets/characters.png` (top-left 256×256 cell, upscaled 4×) was turned into a clean front/side/back turnaround with Flux 2 Klein image edit in ComfyUI; the front view (left quarter) went through single-view Pixal3D (`scripts/joachim_pixal3d.api.json`) and was prepared with `blender -b --factory-startup -P scripts/joachim_prep.blend.py -- input.glb public/joachim.glb 0 0.73 0.805`. The model has no skeleton; the game bends head and jaw in a vertex shader using the neck and mouth heights the prep script prints. (Multi-view Pixal3D needs more memory than this machine can spare.)
 - `server/leaderboard.mjs`: leaderboard logic on SQLite via the built-in `node:sqlite` (Node 22.13+). No npm dependencies.
 - `server/app.mjs`: HTTP server for `/api/leaderboard` and `/api/health`, with a limit of 40 requests per minute per IP.
 
